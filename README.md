@@ -10,31 +10,33 @@ It incorporates:
 * A complete history of the [ocamllibs SVN repository][2] (in the `libs`
   subdirectory), which contains source and binary dependencies that are needed
   to compile Haxe.
-* A modified copy of [install.ml][3], the Haxe build script, which is for some
-  strange reason maintained outside the Haxe SVN repository (modified to work
-  with this git mirror, since the original script is dependent on SVN).
+* A copy of install.ml modified to work without SVN. Haxe has a proper
+  Makefile now, but install.ml is still useful for compiling on Windows, or
+  if the Makefile doesn’t work for you.
 
 
 Building on Linux/Unix
 ----------------------
 
-To build you need the [OCaml compiler][4], camlp4 (usually included with
-OCaml), [Findlib][5], and [zlib][6] (including development header files).
+To build you need a working GCC compiler toolchain, the [OCaml compiler][4],
+camlp4 (usually included with OCaml), [Findlib][5], [Neko][24], and [zlib][6]
+(including development header files).
 
 To install these on Debian/Ubuntu systems, just run:
 
 ```
-sudo apt-get install ocaml camlp4 ocaml-findlib zlib1g-dev
+sudo apt-get install build-essential ocaml camlp4 ocaml-findlib \
+	neko zlib1g-dev
 ```
 
 Then, to build, run:
 
 ```
-ocaml install.ml
+make
 ```
 
-If all goes well, you will end up with a `bin` directory containing the
-`haxe` executable, and the standard library `std`.
+If all goes well, you will end up with the executables `haxe`, `haxedoc`,
+and `haxelib` in the working directory.
 
 
 Building on Windows
@@ -71,12 +73,19 @@ If all goes well, you will end up with a `bin` directory containing
 `haxe.exe`, and the standard library `std`.
 
 
+### Using the Makefile on Windows
+
+It is apparently possible to build for Windows using `Makefile.win`, but
+I could not find clear documentation of the required tools, and it does not
+appear to be at all straightforward to set up.
+
+
 Install
 -------
 
 Despite the name, `install.ml` doesn’t actually install Haxe, it just compiles
-it. You need to manually copy the binary and standard library to wherever
-you want them.
+it. You need to manually copy the binaries and standard library (`std`) to
+wherever you want them.
 
 
 Branches
@@ -168,3 +177,4 @@ Haxe itself is developed by many people, very few of whom are me.
   [21]: http://code.google.com/p/ocamllibs/source/browse/trunk/ "Browse ocamllibs SVN trunk"
   [22]: https://github.com/haxe-mirrors/haxe/tree/upstream-install-ml "upstream-install-ml branch"
   [23]: https://github.com/haxe-mirrors/haxe/tree/master "master branch"
+  [24]: http://nekovm.org/ "Neko"
