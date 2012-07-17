@@ -56,9 +56,6 @@ let command c =
 	msg ("> " ^ c);
 	if Sys.command c <> 0 then failwith ("Error while running " ^ c)
 
-let cvs root cmd =
-	command ("cvs -z3 -d" ^ root ^ " " ^ cmd)
-
 let ocamlc file =
 	if bytecode then command ("ocamlc -c " ^ file);
 	if native then command ("ocamlopt -c " ^ ocamloptflags ^ file)
@@ -69,12 +66,8 @@ let modules l ext =
 ;;
 
 
-let download() =
-	command "svn co http://haxe.googlecode.com/svn/trunk haxe";
-in
-
 let compile_libs() =
-	Sys.chdir "haxe/libs";
+	Sys.chdir "libs";
 
 	(* EXTLIB *)
 	Sys.chdir "extlib";
@@ -117,14 +110,13 @@ let compile_libs() =
 	if native then command ("ocamlopt -a -o xml-light.cmxa " ^ files);
 	Sys.chdir "..";
 
-	Sys.chdir "../..";
+	Sys.chdir "..";
 in
 
 let compile() =
 
 	(try Unix.mkdir "bin" 0o740 with Unix.Unix_error(Unix.EEXIST,_,_) -> ());
 
-	Sys.chdir "haxe";
 	(* HAXE *)
 	command "ocamllex lexer.mll";
 	let libs = [
@@ -152,19 +144,18 @@ let compile() =
 	let path_str = String.concat " " (List.map (fun s -> "-I " ^ s) paths) in
 	let libs_str ext = " " ^ String.concat " " (List.map (fun l -> l ^ ext) libs) ^ " " in
 	ocamlc (path_str ^ " -pp camlp4o " ^ modules mlist ".ml");
-	if bytecode then command ("ocamlc -custom -o ../bin/haxe-byte" ^ exe_ext ^ libs_str ".cma" ^ modules mlist ".cmo");
-	if native then command ("ocamlopt -o ../bin/haxe" ^ exe_ext ^ libs_str ".cmxa" ^ modules mlist ".cmx");
+	if bytecode then command ("ocamlc -custom -o bin/haxe-byte" ^ exe_ext ^ libs_str ".cma" ^ modules mlist ".cmo");
+	if native then command ("ocamlopt -o bin/haxe" ^ exe_ext ^ libs_str ".cmxa" ^ modules mlist ".cmx");
 in
 
 let make_std() =
 
-	if Sys.file_exists "../bin/std" then command (if os_type = "Win32" then "rmdir /S /Q ..\\bin\\std" else "rm -rf ../bin/std");
-	command "svn export -q std ../bin/std";
+	if Sys.file_exists "bin/std" then command (if os_type = "Win32" then "rmdir /S /Q ..\\bin\\std" else "rm -rf ../bin/std");
+	command (if os_type = "Win32" then "xcopy /S /I std bin\\std" else "cp -r std bin/std");
 
 in
 let startdir = Sys.getcwd() in
 try
-	download();
 	compile_libs();
 	compile();
 	make_std();
@@ -173,3 +164,4 @@ with
 	Failure msg ->
 		Sys.chdir startdir;
 		prerr_endline msg; exit 1
+
