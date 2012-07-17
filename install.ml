@@ -150,7 +150,7 @@ in
 
 let make_std() =
 
-	if Sys.file_exists "bin/std" then command (if os_type = "Win32" then "rmdir /S /Q ..\\bin\\std" else "rm -rf ../bin/std");
+	if Sys.file_exists "bin/std" then command (if os_type = "Win32" then "rmdir /S /Q bin\\std" else "rm -rf bin/std");
 	command (if os_type = "Win32" then "xcopy /S /I std bin\\std" else "cp -r std bin/std");
 
 in
