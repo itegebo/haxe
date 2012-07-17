@@ -1,0 +1,12 @@
+*.cmi
+*.cmx
+*.obj
+*.cmxa
+*.lib
+*.o
+*.a
+/bin
+/lexer.ml
+/libs/xml-light/xml_lexer.ml
+/libs/xml-light/xml_parser.ml
+/libs/xml-light/xml_parser.mli
