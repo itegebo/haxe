@@ -79,6 +79,24 @@ it. You need to manually copy the binary and standard library to wherever
 you want them.
 
 
+Branches
+--------
+
+**[haxe/master][18]** tracks the [official Haxe SVN trunk][19], without any
+additional changes (and also without any SVN externals).
+
+**[ocamllibs/master][20]** tracks [ocamllibs trunk][21], without any
+additional changes.
+
+**[upstream-install-ml][22]** tracks the [official install.ml][3],
+without any additional changes.
+
+**[master][23]** tracks all of the above, and includes this README and some
+changes to `install.ml` so that everything compiles out of the box.
+**haxe/master**, **ocamllibs/master** and **upstream-install-ml** are all
+merged into the **master** branch.
+
+
 Patches and Pull Requests
 -------------------------
 
@@ -144,3 +162,9 @@ Haxe itself is developed by many people, very few of whom are me.
   [15]: https://github.com/haxe-mirrors/haxe/issues "Issues"
   [16]: https://github.com/TheHippo "TheHippo (Philipp Klose) on GitHub"
   [17]: https://github.com/TheHippo/haxe "TheHippo/haxe on GitHub"
+  [18]: https://github.com/haxe-mirrors/haxe/tree/haxe/master "haxe/master branch"
+  [19]: http://code.google.com/p/haxe/source/browse/trunk/ "Browse Haxe SVN trunk"
+  [20]: https://github.com/haxe-mirrors/haxe/tree/ocamllibs/master "ocamllibs/master branch"
+  [21]: http://code.google.com/p/ocamllibs/source/browse/trunk/ "Browse ocamllibs SVN trunk"
+  [22]: https://github.com/haxe-mirrors/haxe/tree/upstream-install-ml "upstream-install-ml branch"
+  [23]: https://github.com/haxe-mirrors/haxe/tree/master "master branch"
