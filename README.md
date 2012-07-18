@@ -91,19 +91,29 @@ wherever you want them.
 Branches
 --------
 
-**[haxe/master][18]** tracks the [official Haxe SVN trunk][19], without any
+### [haxe/master][18]
+
+This branch tracks the [official Haxe SVN trunk][19], without any
 additional changes (and also without any SVN externals).
 
-**[ocamllibs/master][20]** tracks [ocamllibs trunk][21], without any
-additional changes.
+### [ocamllibs/master][20]
 
-**[upstream-install-ml][22]** tracks the [official install.ml][3],
-without any additional changes.
+This branch tracks [ocamllibs trunk][21], without any additional changes.
 
-**[master][23]** tracks all of the above, and includes this README and some
-changes to `install.ml` so that everything compiles out of the box.
-**haxe/master**, **ocamllibs/master** and **upstream-install-ml** are all
-merged into the **master** branch.
+### [master][23]
+
+Both haxe/master and ocamllibs/master are merged into master. This branch
+also includes this README and a modified copy of `install.ml` in the
+root so that everything compiles out of the box.
+
+The vanilla `install.ml` can be found in the `doc` subdirectory, although it
+isn’t very useful to git users because it expects to check Haxe out from SVN.
+
+### Other branches
+
+Other SVN branches of haxe and ocamllibs will be tracked as haxe/branch-name
+and ocamllibs/branch-name respectively (at the time of writing there aren’t
+any).
 
 
 Patches and Pull Requests
@@ -125,9 +135,8 @@ Updates
 -------
 
 This repository is updated automatically once per hour: changes from both
-upstream SVN repositories are synced and merged in, and even changes to
-`install.ml` should be handled automatically for the most part. Occasionally
-manual intervention is required and it takes a bit longer.
+upstream SVN repositories are synced and merged in. Occasionally manual
+intervention is required and it takes a bit longer.
 
 
 Contact
@@ -175,6 +184,5 @@ Haxe itself is developed by many people, very few of whom are me.
   [19]: http://code.google.com/p/haxe/source/browse/trunk/ "Browse Haxe SVN trunk"
   [20]: https://github.com/haxe-mirrors/haxe/tree/ocamllibs/master "ocamllibs/master branch"
   [21]: http://code.google.com/p/ocamllibs/source/browse/trunk/ "Browse ocamllibs SVN trunk"
-  [22]: https://github.com/haxe-mirrors/haxe/tree/upstream-install-ml "upstream-install-ml branch"
   [23]: https://github.com/haxe-mirrors/haxe/tree/master "master branch"
   [24]: http://nekovm.org/ "Neko"
