@@ -39,6 +39,7 @@ type dce = {
 	ctx : typer;
 	all_types : module_type list;
 	debug : bool;
+	follow_expr : dce -> texpr -> unit;
 	mutable added_fields : (tclass * tclass_field * bool) list;
 }
 
@@ -55,6 +56,7 @@ let keep_whole_class dce c =
 	has_meta ":keep" c.cl_meta
 	|| super_forces_keep c
 	|| (match c with
+		| { cl_extern = true; cl_path = ([],"Math")} when dce.ctx.com.platform = Js -> false
 		| { cl_extern = true }
 		| { cl_path = ["flash";"_Boot"],"RealBoot" } -> true
 		| { cl_path = [],"String" }
@@ -87,6 +89,7 @@ let rec mark_class dce c = if not (has_meta ":used" c.cl_meta) then begin
 	) c.cl_ordered_fields;
 	c.cl_meta <- (":used",[],c.cl_pos) :: c.cl_meta;
 	(* we always have to keep super classes and implemented interfaces *)
+	(match c.cl_init with None -> () | Some init -> dce.follow_expr dce init);
 	List.iter (fun (c,_) -> mark_class dce c) c.cl_implements;
 	match c.cl_super with None -> () | Some (csup,pl) -> mark_class dce csup;
 end
@@ -96,6 +99,7 @@ let rec mark_t dce t = match follow t with
 	| TInst({cl_kind = KTypeParameter tl},pl) -> List.iter (mark_t dce) tl; List.iter (mark_t dce) pl
 	| TInst(c,pl) -> mark_class dce c; List.iter (mark_t dce) pl
 	| TFun(args,ret) -> List.iter (fun (_,_,t) -> mark_t dce t) args; mark_t dce ret
+	| TEnum(e,pl) -> if not (has_meta ":used" e.e_meta) then e.e_meta <- (":used",[],e.e_pos) :: e.e_meta; List.iter (mark_t dce) pl
 	| _ -> ()
 
 (* find all dependent fields by checking implementing/subclassing types *)
@@ -209,12 +213,15 @@ let run ctx main types modules =
 		all_types = types;
 		debug = Common.defined ctx.com "dce_debug";
 		added_fields = [];
+		follow_expr = expr;
 	} in
 	(* first step: get all entry points, which is the main method and all class methods which are marked with @:keep *)
 	let rec loop acc types = match types with
 		| (TClassDecl c) :: l ->
 			let keep_class = keep_whole_class dce c in
 			if keep_class then mark_class dce c;
+			(* extern classes should never serve as entry point *)
+			let keep_class = keep_class && not c.cl_extern in
 			let rec loop2 acc cfl stat = match cfl with
 				| cf :: l when keep_class || keep_field dce cf ->
 					loop2 ((c,cf,stat) :: acc) l stat
@@ -225,7 +232,6 @@ let run ctx main types modules =
 			in
 			let acc = loop2 acc c.cl_ordered_statics true in
 			let acc = loop2 acc c.cl_ordered_fields false in
-			(match c.cl_init with None -> () | Some init -> expr dce init);
 			loop acc l
 		| _ :: l ->
 			loop acc l
@@ -295,6 +301,10 @@ let run ctx main types modules =
 				if dce.debug then print_endline ("[DCE] Removed class " ^ (s_type_path c.cl_path));
 				loop acc l
 			end
+		| (TEnumDecl e) as mt :: l when has_meta ":used" e.e_meta || has_meta ":keep" e.e_meta || e.e_extern ->
+			loop (mt :: acc) l
+		| TEnumDecl _ :: l ->
+			loop acc l
 		| mt :: l ->
 			loop (mt :: acc) l
 		| [] ->
