@@ -1946,6 +1946,27 @@ and type_expr ctx ?(need_val=true) (e,p) =
 	| ENew (t,el) ->
 		let t = Typeload.load_instance ctx t p true in
 		let el, c , params = (match follow t with
+		| TInst ({cl_kind = KTypeParameter tl} as c,params) ->
+			if not (ctx.curclass.cl_kind = KGeneric) then display_error ctx "Type parameters can only be constructed in generic instances" p;
+			(try
+				let tt = List.assoc (snd c.cl_path) ctx.curclass.cl_types in
+				if not (type_iseq tt t) then raise Not_found;
+			with Not_found ->
+				display_error ctx "Only class type parameters can be constructed in generic instances" p);
+			let el = List.map (type_expr ctx) el in
+			let ctor = mk_field "new" (tfun (List.map (fun e -> e.etype) el) ctx.t.tvoid) p in
+  			(match c.cl_constructor with
+ 				| Some ctor2 ->
+ 					unify ctx ctor.cf_type ctor2.cf_type p
+ 				| None ->
+					ctor.cf_kind <- Method MethNormal;
+ 					c.cl_constructor <- Some ctor;
+					List.iter (fun t -> match follow t with
+						| TAnon a -> (try unify ctx (PMap.find "new" a.a_fields).cf_type ctor.cf_type p; with Not_found -> ())
+						| _ -> ()
+					) tl;
+					c.cl_kind <- KTypeParameter ((mk_anon (PMap.add "new" ctor PMap.empty)) :: tl));
+			el,c,params
 		| TInst (c,params) ->
 			let name = (match c.cl_path with [], name -> name | x :: _ , _ -> x) in
 			if PMap.mem name ctx.locals then error ("Local variable " ^ name ^ " is preventing usage of this class here") p;
