@@ -120,7 +120,7 @@ let rec load_type_def ctx p t =
 let check_param_constraints ctx types t pl c p =
  	match follow t with
 	| TMono _ -> ()
-	| mt ->
+	| _ ->
 		let ctl = (match c.cl_kind with KTypeParameter l -> l | _ -> []) in
 		List.iter (fun ti ->
 			(*
@@ -128,12 +128,7 @@ let check_param_constraints ctx types t pl c p =
 				let ti = try snd (List.find (fun (_,t) -> match follow t with TInst(i2,[]) -> i == i2 | _ -> false) types) with Not_found -> TInst (i,tl) in
 			*)
 			let ti = apply_params types pl ti in
-			try
-				unify_raise ctx t ti p
-			with Error (Unify l,p) ->
-				display_error ctx (error_msg (Unify (Constraint_failure (s_type (print_context()) mt) :: l))) p;
-				let pc = pos_t ti in
-				if pc <> Ast.null_pos then display_error ctx "Constraint was defined here" pc;
+			unify ctx t ti p
 		) ctl
 
 (* build an instance from a full type *)
@@ -151,7 +146,7 @@ let rec load_instance ctx t p allow_no_params =
 				match follow t with
 				| TInst (c,_) ->
 					let t = mk_mono() in
-					if c.cl_kind <> KTypeParameter [] then delay_late ctx (fun() -> check_param_constraints ctx types t (!pl) c p);
+					delay_late ctx (fun() -> check_param_constraints ctx types t (!pl) c p);
 					t;
 				| _ -> assert false
 			) types;
@@ -616,10 +611,12 @@ let set_heritance ctx c herits p =
 	) herits in
 	List.iter loop (List.filter (ctx.g.do_inherit ctx c p) herits)
 
-let type_type_params ctx path get_params p (n,flags) =
+let rec type_type_params ctx path get_params p tp =
+	let n = tp.tp_name in
 	let c = mk_class ctx.current (fst path @ [snd path],n) p in
-	let t = TInst (c,[]) in
-	match flags with
+	c.cl_types <- List.map (type_type_params ctx c.cl_path get_params p) tp.tp_params;
+	let t = TInst (c,List.map snd c.cl_types) in	
+	match tp.tp_constraints with
 	| [] -> 
 		c.cl_kind <- KTypeParameter [];
 		n, t
@@ -627,7 +624,7 @@ let type_type_params ctx path get_params p (n,flags) =
 		let r = exc_protect ctx (fun r ->
 			r := (fun _ -> t);
 			let ctx = { ctx with type_params = ctx.type_params @ get_params() } in
-			c.cl_kind <- KTypeParameter (List.map (load_complex_type ctx p) flags);
+			c.cl_kind <- KTypeParameter (List.map (load_complex_type ctx p) tp.tp_constraints);
 			t
 		) in
 		delay ctx (fun () -> ignore(!r()));
@@ -635,8 +632,8 @@ let type_type_params ctx path get_params p (n,flags) =
 
 let type_function_params ctx fd fname p =
 	let params = ref [] in
-	params := List.map (fun (n,flags) ->
-		type_type_params ctx ([],fname) (fun() -> !params) p (n,flags)
+	params := List.map (fun tp ->
+		type_type_params ctx ([],fname) (fun() -> !params) p tp
 	) fd.f_params;
 	!params
 
@@ -1569,8 +1566,8 @@ let parse_module ctx m p =
 						{
 							tpackage = !remap;
 							tname = d.d_name;
-							tparams = List.map (fun (s,_) ->
-								TPType (CTPath { tpackage = []; tname = s; tparams = []; tsub = None; })
+							tparams = List.map (fun tp ->
+								TPType (CTPath { tpackage = []; tname = tp.tp_name; tparams = []; tsub = None; })
 							) d.d_params;
 							tsub = None;
 						});

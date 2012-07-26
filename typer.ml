@@ -126,8 +126,6 @@ let field_type ctx c pl f p =
 							Type.unify m ct
 						with Unify_error l ->
 							display_error ctx (error_msg (Unify (Constraint_failure (f.cf_name ^ "." ^ name) :: l))) p;
-							let pc = pos_t ct in
-							if pc <> Ast.null_pos then display_error ctx "Constraint was defined here" pc;
 					) constr
 				);
 			| _ -> ()
@@ -440,8 +438,7 @@ let make_call ctx e params t p =
 			| _ when has_meta ":extern" f.cf_meta -> true
 			| _ -> false
 		) in
-		(* can not inline generic instance calls here *)
-		(match cl with Some {cl_kind = KGenericInstance _} -> raise Exit | _ -> ());
+		(* we have to make sure that we mark the field as used here so DCE does not remove it *)
 		if not ctx.g.doinline && not is_extern then raise Exit;
 		ignore(follow f.cf_type); (* force evaluation *)
 		let params = List.map (ctx.g.do_optimize ctx) params in
@@ -1996,12 +1993,12 @@ and type_expr ctx ?(need_val=true) (e,p) =
 	| EUnop (op,flag,e) ->
 		type_unop ctx op flag e p
 	| EFunction (name,f) ->
-		let params = Typeload.type_function_params ctx f "localfun" p in
+		let params = Typeload.type_function_params ctx f (match name with None -> "localfun" | Some n -> n) p in
 		if params <> [] then begin
 			if name = None then display_error ctx "Type parameters not supported in unnamed local functions" p;
 			if need_val then error "Type parameters are not supported for rvalue functions" p
 		end else
-			List.iter (fun (_,c) -> if c <> [] then display_error ctx "Type parameters constraints are not supported for local functions" p) f.f_params;
+			List.iter (fun tp -> if tp.tp_constraints <> [] then display_error ctx "Type parameters constraints are not supported for local functions" p) f.f_params;
 		let old = ctx.type_params in
 		ctx.type_params <- params @ ctx.type_params;
 		let rt = Typeload.load_type_opt ctx p f.f_type in
