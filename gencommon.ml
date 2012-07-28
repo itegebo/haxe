@@ -4589,7 +4589,7 @@ struct
                   handle_cast gen ({ ecall with eexpr = TCall({ e1 with eexpr = TField(ef, f) }, elist )  }) (gen.greal_type ecall.etype) (gen.greal_type ret)
                 )
               | _ ->
-                let params = TypeParams.infer_params gen ecall.epos (get_fun cf.cf_type) (get_fun e1.etype) cf.cf_params impossible_tparam_is_dynamic in
+                let _params = TypeParams.infer_params gen ecall.epos (get_fun cf.cf_type) (get_fun e1.etype) cf.cf_params impossible_tparam_is_dynamic in
                 let args, ret = get_args actual_t in
                 let actual_t = TFun(List.map (fun (n,o,t) -> (n,o,gen.greal_type t)) args, gen.greal_type ret) in
                 
@@ -4597,7 +4597,7 @@ struct
                   because of differences on how <Dynamic> is handled on the platforms, this is a hack to be able to 
                   correctly use class field type parameters with RealTypeParams
                 *)
-                let cf_params = List.map (fun t -> match follow t with | TDynamic _ -> t_empty | _ -> t) params in
+                let cf_params = List.map (fun t -> match follow t with | TDynamic _ -> t_empty | _ -> t) _params in
                 let t = apply_params cl.cl_types (gen.greal_type_param (TClassDecl cl) params) actual_t in
                 let t = apply_params cf.cf_params (gen.greal_type_param (TClassDecl cl) cf_params) t in
                 
@@ -9277,6 +9277,54 @@ struct
   let configure gen =
     let map e = Some(default_implementation gen e) in
     gen.gsyntax_filters#add ~name:name ~priority:(PCustom priority) map
+  
+end;;
+
+(* ******************************************* *)
+(* OverrideFix *)
+(* ******************************************* *)
+
+(*
+  
+  When DCE is on, sometimes a field is marked as override when it 
+  really doesn't override anything. This module filter will take care of this.
+  
+  dependencies:
+    No dependencies
+  
+*)
+
+module OverrideFix =
+struct
+
+  let name = "override_fix"
+  
+  let priority = solve_deps name []
+  
+  let default_implementation gen =
+    let rec run e =
+      match e.eexpr with 
+        | _ -> Type.map_expr run e
+    in
+    run
+  
+  let configure gen =
+    let map md =  
+      match md with
+        | TClassDecl cl ->
+          cl.cl_overrides <- List.filter (fun s ->
+            let rec loop cl =
+              match cl.cl_super with
+                | Some (cl,_) when PMap.mem s cl.cl_fields -> true
+                | Some (cl,_) -> loop cl
+                | None -> false
+            in
+            loop cl
+          ) cl.cl_overrides;
+          Some md
+        | _ -> Some md
+    in
+    gen.gmodule_filters#add ~name:name ~priority:(PCustom priority) map
   
 end;;
 
