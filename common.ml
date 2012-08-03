@@ -53,6 +53,37 @@ type stats = {
 	s_macros_called : int ref;
 }
 
+(**
+	The capture policy tells which handling we make of captured locals
+	(the locals which are referenced in local functions)
+
+	See details/implementation in Codegen.captured_vars
+*)
+type capture_policy =
+	(** do nothing, let the platform handle it *)
+	| CPNone 
+	(** wrap all captured variables into a single-element array to allow modifications *)
+	| CPWrapRef
+	(** similar to wrap ref, but will only apply to the locals that are declared in loops *)
+	| CPLoopVars
+
+type platform_config = {
+	(** has a static type system, with not-nullable basic types (Int/Float/Bool) *)
+	pf_static : bool;
+	(** has access to the "sys" package *)
+	pf_sys : bool;
+	(** local variables are block-scoped *)
+	pf_locals_scope : bool;
+	(** captured local variables are scoped *)
+	pf_captured_scope : bool;
+	(** generated locals must be absolutely unique wrt the current function *)
+	pf_unique_locals : bool;
+	(** which expressions can be generated to initialize member variables (or will be moved into the constructor *)
+	pf_can_init_member : tclass_field -> bool;
+	(** captured variables handling (see before) *)
+	pf_capture_policy : capture_policy;
+}
+
 type context = {
 	(* config *)
 	version : int;
@@ -63,6 +94,7 @@ type context = {
 	mutable foptimize : bool;
 	mutable dead_code_elimination : bool;
 	mutable platform : platform;
+	mutable config : platform_config;
 	mutable std_path : string list;
 	mutable class_path : string list;
 	mutable main_class : Type.path option;
@@ -105,6 +137,118 @@ let stats =
 		s_macros_called = ref 0;
 	}
 
+let default_config = 
+	{
+		pf_static = true;
+		pf_sys = true;
+		pf_locals_scope = true;
+		pf_captured_scope = true;
+		pf_unique_locals = false;
+		pf_can_init_member = (fun _ -> true);
+		pf_capture_policy = CPNone;
+	}
+
+let get_config com =
+	let defined f = PMap.mem f com.defines in
+	match com.platform with
+	| Cross ->
+		default_config
+	| Flash8 ->
+		{
+			pf_static = false;
+			pf_sys = false;
+			pf_locals_scope = com.flash_version > 6.;
+			pf_captured_scope = false;
+			pf_unique_locals = false;
+			pf_can_init_member = (fun _ -> true);
+			pf_capture_policy = CPLoopVars;
+		}
+	| Js ->
+		{
+			pf_static = false;
+			pf_sys = false;
+			pf_locals_scope = false;		
+			pf_captured_scope = false;
+			pf_unique_locals = false;
+			pf_can_init_member = (fun _ -> false);
+			pf_capture_policy = CPLoopVars;
+		}
+	| Neko ->
+		{
+			pf_static = false;
+			pf_sys = true;
+			pf_locals_scope = true;
+			pf_captured_scope = true;
+			pf_unique_locals = false;
+			pf_can_init_member = (fun _ -> false);
+			pf_capture_policy = CPNone;
+		}
+	| Flash when defined "as3" ->
+		{
+			pf_static = true;
+			pf_sys = false;
+			pf_locals_scope = false;
+			pf_captured_scope = true;
+			pf_unique_locals = true;
+			pf_can_init_member = (fun _ -> true);
+			pf_capture_policy = CPLoopVars;
+		}
+	| Flash ->
+		{
+			pf_static = true;
+			pf_sys = false;
+			pf_locals_scope = true;
+			pf_captured_scope = true; (* handled by genSwf9 *)
+			pf_unique_locals = false;
+			pf_can_init_member = (fun _ -> false);
+			pf_capture_policy = CPLoopVars;
+		}
+	| Php ->
+		{
+			pf_static = false;
+			pf_sys = true;
+			pf_locals_scope = false; (* some duplicate work is done in genPhp *)
+			pf_captured_scope = false;
+			pf_unique_locals = false;
+			pf_can_init_member = (fun cf ->
+				match cf.cf_kind, cf.cf_expr with
+				| Var { v_write = AccCall _ },  _ -> false
+				| _, Some { eexpr = TTypeExpr _ } -> false
+				| _ -> true 
+			);
+			pf_capture_policy = CPNone;
+		}
+	| Cpp ->
+		{
+			pf_static = true;
+			pf_sys = true;
+			pf_locals_scope = true;
+			pf_captured_scope = true;
+			pf_unique_locals = false;
+			pf_can_init_member = (fun _ -> false);
+			pf_capture_policy = CPWrapRef;
+		}
+	| Cs ->
+		{
+			pf_static = true;
+			pf_sys = true;
+			pf_locals_scope = false;
+			pf_captured_scope = true;
+			pf_unique_locals = true;
+			pf_can_init_member = (fun _ -> false);
+			pf_capture_policy = CPWrapRef;
+		}
+	| Java ->
+		{
+			pf_static = true;
+			pf_sys = true;
+			pf_locals_scope = false;
+			pf_captured_scope = true;
+			pf_unique_locals = false;
+			pf_can_init_member = (fun _ -> false);
+			pf_capture_policy = CPWrapRef;
+		}
+
 let create v args =
 	let m = Type.mk_mono() in
 	{
@@ -117,6 +261,7 @@ let create v args =
 		features = Hashtbl.create 0;
 		dead_code_elimination = false;
 		platform = Cross;
+		config = default_config;
 		print = print_string;
 		std_path = [];
 		class_path = [];
@@ -222,9 +367,9 @@ let init_platform com pf =
 	let name = platform_name pf in
 	let forbid acc p = if p = name || PMap.mem p acc then acc else PMap.add p Forbidden acc in
 	com.package_rules <- List.fold_left forbid com.package_rules (List.map platform_name platforms);
-	(match pf with
-	| Cpp | Php | Neko | Java | Cs -> define com "sys"
-	| _ -> com.package_rules <- PMap.add "sys" Forbidden com.package_rules);
+	com.config <- get_config com;
+	if com.config.pf_static then define com "static";
+	if com.config.pf_sys then define com "sys" else com.package_rules <- PMap.add "sys" Forbidden com.package_rules;
 	define com name
 
 let add_feature com f =
@@ -255,11 +400,6 @@ let rec has_feature com f =
 let error msg p = raise (Abort (msg,p))
 
 let platform ctx p = ctx.platform = p
-
-let is_static_platform ctx =
-	match ctx.platform with
-	| Cpp | Flash | Cs | Java -> true
-	| _ -> false
 
 let add_filter ctx f =
 	ctx.filters <- f :: ctx.filters
