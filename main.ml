@@ -387,16 +387,20 @@ let create_context params =
 	ctx
 
 let rec process_params create pl =
+	let each_params = ref [] in
 	let rec loop acc = function
 		| [] ->
 			let ctx = create (List.rev acc) in
 			init ctx;
 			ctx.flush()
 		| "--next" :: l ->
-			let ctx = create (List.rev acc) in
+			let ctx = create (!each_params @ (List.rev acc)) in
 			ctx.has_next <- true;
 			init ctx;
 			ctx.flush();
+			loop [] l
+		| "--each" :: l ->
+			each_params := List.rev acc;
 			loop [] l
 		| "--cwd" :: dir :: l ->
 			(* we need to change it immediately since it will affect hxml loading *)
@@ -1032,7 +1036,8 @@ try
 			Codegen.captured_vars com;
 			Codegen.rename_local_vars com;
 		] in
-		Codegen.post_process com.types filters;
+		List.iter (Codegen.post_process filters) com.types;
+		Codegen.post_process_end();
 		Common.add_filter com (fun() -> List.iter (Codegen.on_generate tctx) com.types);
 		List.iter (fun f -> f()) (List.rev com.filters);
 		if ctx.has_error then raise Abort;

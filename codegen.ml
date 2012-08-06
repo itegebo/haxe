@@ -242,6 +242,22 @@ let rec build_generic ctx c p tl =
 		Hashtbl.add ctx.g.modules mg.m_path mg;
 		add_dependency mg m;
 		add_dependency ctx.current mg;
+		(* ensure that type parameters are set in dependencies *)
+		let rec loop t =
+			match t with
+			| TInst (c,tl) -> add_dependency mg c.cl_module; List.iter loop tl
+			| TEnum (e,tl) -> add_dependency mg e.e_module; List.iter loop tl
+			| TType (t,tl) -> add_dependency mg t.t_module; List.iter loop tl
+			| TMono r ->
+				(match !r with
+				| None -> ()
+				| Some t -> loop t)
+			| TLazy f ->
+				loop ((!f)());
+			| TAnon _ | TDynamic _ | TFun _ ->
+				assert false
+		in
+		List.iter loop tl;
 		let rec loop l1 l2 =
 			match l1, l2 with
 			| [] , [] -> []
@@ -1149,32 +1165,32 @@ let check_local_vars_init e =
 
 let pp_counter = ref 1
 
-let post_process types filters =
+let post_process filters t =
 	(* ensure that we don't process twice the same (cached) module *)
-	List.iter (fun t ->
-		let m = (t_infos t).mt_module.m_extra in
-		if m.m_processed = 0 then m.m_processed <- !pp_counter;
-		if m.m_processed = !pp_counter then
-		match t with
-		| TClassDecl c ->
-			let process_field f =
-				match f.cf_expr with
-				| None -> ()
-				| Some e ->
-					f.cf_expr <- Some (List.fold_left (fun e f -> f e) e filters)
-			in
-			List.iter process_field c.cl_ordered_fields;
-			List.iter process_field c.cl_ordered_statics;
-			(match c.cl_constructor with
-			| None -> ()
-			| Some f -> process_field f);
-			(match c.cl_init with
+	let m = (t_infos t).mt_module.m_extra in
+	if m.m_processed = 0 then m.m_processed <- !pp_counter;
+	if m.m_processed = !pp_counter then
+	match t with
+	| TClassDecl c ->
+		let process_field f =
+			match f.cf_expr with
 			| None -> ()
 			| Some e ->
-				c.cl_init <- Some (List.fold_left (fun e f -> f e) e filters));
-		| TEnumDecl _ -> ()
-		| TTypeDecl _ -> ()
-	) types;
+				f.cf_expr <- Some (List.fold_left (fun e f -> f e) e filters)
+		in
+		List.iter process_field c.cl_ordered_fields;
+		List.iter process_field c.cl_ordered_statics;
+		(match c.cl_constructor with
+		| None -> ()
+		| Some f -> process_field f);
+		(match c.cl_init with
+		| None -> ()
+		| Some e ->
+			c.cl_init <- Some (List.fold_left (fun e f -> f e) e filters));
+	| TEnumDecl _ -> ()
+	| TTypeDecl _ -> ()
+
+let post_process_end() =
 	incr pp_counter
 
 (* -------------------------------------------------------------------------- *)
