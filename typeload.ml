@@ -227,7 +227,7 @@ and load_complex_type ctx p t =
 						if PMap.mem f a2.a_fields then error ("Cannot redefine field " ^ f) p
 					) a.a_fields;
 					mk_anon (PMap.foldi PMap.add a.a_fields a2.a_fields)
-				| _ -> error "Cannot only extend classes and anonymous" p
+				| _ -> error "Can only extend classes and structures" p
 			in
 			loop (load_instance ctx t p false)
 		| _ -> assert false)
@@ -1078,13 +1078,13 @@ let init_class ctx c p herits fields =
 			if inline && dynamic then error "You can't have both 'inline' and 'dynamic'" p;
 			ctx.curmethod <- name;
 			ctx.type_params <- if stat then params else params @ ctx.type_params;
-			let ret = type_opt ctx p fd.f_type in
+			let constr = (name = "new") in
+			let ret = if constr then ctx.t.tvoid else type_opt ctx p fd.f_type in
 			let args = List.map (fun (name,opt,t,c) ->
 				let t, c = type_function_param ctx (type_opt ctx p t) c opt p in
 				name, c, t
 			) fd.f_args in
 			let t = TFun (fun_args args,ret) in
-			let constr = (name = "new") in
 			if constr && c.cl_interface then error "An interface cannot have a constructor" p;
 			if c.cl_interface && not stat && fd.f_expr <> None then error "An interface method cannot have a body" p;
 			if constr then (match fd.f_type with
