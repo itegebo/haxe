@@ -1027,7 +1027,6 @@ try
 		end;
 		let t = Common.timer "filters" in
 		let main, types, modules = Typer.generate tctx in
-		let types,modules = if Common.defined ctx.com "dce" && not !interp then Dce.run tctx main types modules else types,modules in
 		com.main <- main;
 		com.types <- types;
 		com.modules <- modules;
@@ -1039,8 +1038,20 @@ try
 		] in
 		List.iter (Codegen.post_process filters) com.types;
 		Codegen.post_process_end();
-		Common.add_filter com (fun() -> List.iter (Codegen.on_generate tctx) com.types);
+		List.iter (Codegen.save_class_state tctx) com.types;
+		if Common.defined ctx.com "dce" && not !interp then Dce.run tctx main;
 		List.iter (fun f -> f()) (List.rev com.filters);
+		let type_filters = [
+			Codegen.check_private_path;
+			Codegen.remove_generic_base;
+			Codegen.apply_native_paths;
+			Codegen.add_rtti;
+			Codegen.remove_extern_fields;
+			Codegen.add_field_inits;
+			Codegen.add_meta_field;
+			Codegen.check_remove_metadata;
+		] in
+		List.iter (fun f -> List.iter (f tctx) com.types) type_filters;
 		if ctx.has_error then raise Abort;
 		(match !xml_out with
 		| None -> ()
