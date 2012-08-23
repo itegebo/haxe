@@ -1873,6 +1873,10 @@ let generate con =
 
 open JData
 
+exception ConversionError of string * pos
+
+let error s p = raise (ConversionError (s, p))
+
 let mk_type_path path params =
   CTPath {
     tpackage = fst path;
@@ -1916,6 +1920,13 @@ and convert_signature p jsig =
   | TMethod _ -> JReader.error "TMethod cannot be converted directly into Complex Type"
   | TTypeParameter s -> mk_type_path ([], s) []
 
+let convert_constant p const =
+  Option.map_default (function
+    | ConstString s -> Some (EConst (String s), p)
+    | ConstInt i -> Some (EConst (Int (Printf.sprintf "%ld" i)), p)
+    | ConstFloat f | ConstDouble f -> Some (EConst (Float (Printf.sprintf "%E" f)), p)
+    | _ -> None) None const
+
 let convert_param p param =
   let name, constraints = match param with
     | (name, Some extends_sig, implem_sig) ->
@@ -1949,6 +1960,91 @@ let convert_java_enum p pe =
     d_data = !data;
   }
 
+let convert_java_field p jc field =
+  let cff_doc = None in
+  let cff_pos = p in
+  let cff_meta = ref [] in
+  let cff_access = ref [] in
+  let cff_name = match field.jf_name with
+    | "<init>" -> "new"
+    | "<clinit>" -> cff_access := [AStatic]; "__init__"
+    | name when String.sub name 0 5 = "__hx_" -> raise Exit
+    | name -> name
+  in
+
+  List.iter (function
+    | JPublic -> cff_access := APublic :: !cff_access
+    | JPrivate -> raise Exit (* private instances aren't useful on externs *)
+    | JProtected -> cff_access := APrivate :: !cff_access
+    | JStatic -> cff_access := AStatic :: !cff_access
+    | JFinal -> cff_meta := (":final", [], p) :: !cff_meta
+    | JSynchronized -> cff_meta := (":synchronized", [], p) :: !cff_meta
+    | JVolatile -> cff_meta := (":volatile", [], p) :: !cff_meta
+    | JTransient -> cff_meta := (":transient", [], p) :: !cff_meta
+    | JVarArgs -> cff_meta := (":varArgs", [], p) :: !cff_meta
+    | _ -> ()
+  ) field.jf_flags;
+
+  List.iter (function
+    | AttrDeprecated -> cff_meta := (":deprecated", [], p) :: !cff_meta
+    (* TODO: pass anotations as @:meta *)
+    | AttrVisibleAnnotations ann ->
+      List.iter (function 
+        | { ann_type = TObject( (["java";"lang"], "Override"), [] ) } ->
+          cff_access := AOverride :: !cff_access
+        | _ -> ()
+      ) ann
+    | _ -> ()
+  ) field.jf_attributes;
+
+  let kind = match field.jf_kind with
+    | JKField -> 
+      FVar (Some (convert_signature p field.jf_signature), convert_constant p field.jf_constant)
+    | JKMethod ->
+      match field.jf_signature with
+      | TMethod (args, ret) ->
+        let i = ref 0 in
+        let args = List.map (fun s ->
+          incr i;
+          "param" ^ string_of_int !i, false, Some(convert_signature p s), None
+        ) args in
+        let t = Option.map_default (convert_signature p) (mk_type_path ([], "Void") []) ret in
+        cff_meta := (":overload", [], p) :: !cff_meta;
+
+        let types = List.map (function
+          | (name, Some ext, impl) ->
+            {
+              tp_name = name;
+              tp_params = [];
+              tp_constraints = List.map (convert_signature p) (ext :: impl);
+            }
+          | (name, None, impl) ->
+            {
+              tp_name = name;
+              tp_params = [];
+              tp_constraints = List.map (convert_signature p) (impl);
+            }
+        ) field.jf_types in
+        
+        FFun ({
+          f_params = types;
+          f_args = args;
+          f_type = Some t;
+          f_expr = None
+        })
+      | _ -> error "Method signature was expected" p
+  in
+
+  {
+    cff_name = cff_name;
+    cff_doc = cff_doc;
+    cff_pos = cff_pos;
+    cff_meta = !cff_meta;
+    cff_access = !cff_access;
+    cff_kind = kind
+  }
+
+
 let convert_java_class p jc =
   match List.mem JEnum jc.cflags with
   | true -> (* is enum *)
@@ -1977,13 +2073,22 @@ let convert_java_class p jc =
       | _ -> flags := HImplements (get_type_path (convert_signature p i)) :: !flags
     ) jc.cinterfaces;
 
+    let fields = ref [] in
+
+    List.iter (fun f ->
+      try
+        fields := convert_java_field p jc f :: !fields
+      with
+        | Exit -> ()
+    ) (jc.cfields @ jc.cmethods);
+
     EClass {
       d_name = snd jc.cpath;
       d_doc = None;
       d_params = List.map (convert_param p) jc.ctypes;
       d_meta = !meta;
       d_flags = !flags;
-      d_data = [];
+      d_data = !fields;
     }
 
 
