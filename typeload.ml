@@ -671,8 +671,7 @@ let type_function ctx args ret fmode f p =
 	let have_ret = (try loop e; false with Exit -> true) in
 	if have_ret then
 		(try return_flow ctx e with Exit -> ())
-	else (try unify_raise ctx ret ctx.t.tvoid p
-		with Error(Unify _,_) -> display_error ctx ("Missing return: " ^ (s_type (print_context()) ret))  p);
+	else (try type_eq EqStrict ret ctx.t.tvoid with Unify_error _ -> display_error ctx ("Missing return " ^ (s_type (print_context()) ret)) p);
 	let rec loop e =
 		match e.eexpr with
 		| TCall ({ eexpr = TConst TSuper },_) -> raise Exit
@@ -1542,7 +1541,7 @@ let resolve_module_file com m remap p =
 		| x :: l , name ->
 			let x = (try
 				match PMap.find x com.package_rules with
-				| Forbidden -> raise (Error (Forbid_package (x,m),p));
+				| Forbidden -> raise (Forbid_package ((x,m,p),[]));
 				| Directory d -> d
 				| Remap d -> remap := d :: l; d
 				with Not_found -> x
@@ -1619,7 +1618,10 @@ let load_module ctx m p =
 				in
 				loop ctx.com.load_extern_type
 			) in
-			type_module ctx m file decls p
+			try
+				type_module ctx m file decls p
+			with Forbid_package (inf,pl) when p <> Ast.null_pos ->
+				raise (Forbid_package (inf,p::pl))
 	) in
 	add_dependency ctx.current m2;
 	m2
