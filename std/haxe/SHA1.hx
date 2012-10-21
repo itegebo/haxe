@@ -23,6 +23,9 @@
  * DAMAGE.
  */
 package haxe;
+
+#if !haxe3
+
 import haxe.Int32;
 
 class SHA1 {
@@ -150,3 +153,5 @@ class SHA1 {
 	}
 
 }
+
+#end
