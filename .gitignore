@@ -10,3 +10,17 @@
 /libs/xml-light/xml_lexer.ml
 /libs/xml-light/xml_parser.ml
 /libs/xml-light/xml_parser.mli
+haxe
+haxedoc
+haxelib
+std/tools/haxedoc/haxedoc
+std/tools/haxedoc/haxedoc.n
+std/tools/haxelib/haxelib
+std/tools/haxelib/haxelib.n
+std/tools/haxelib/index.n
+*.swp
+*.cmo
+*.exe
+*.cma
+libs/xml-light/doc/
+haxe.byte

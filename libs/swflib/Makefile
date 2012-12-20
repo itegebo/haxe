@@ -4,37 +4,42 @@
 
 CFLAGS= -I ../extlib -I ../extc -g
 LIBS=
-LFLAGS= -o swflib.cmxa -a
 
-MODULES=as3code.cmx png.cmx swf.cmx actionScript.cmx as3parse.cmx swfPic.cmx as3hlparse.cmx swfParser.cmx
+MODULES=as3code png swf actionScript as3parse swfPic as3hlparse swfParser
 
-all: swflib.cmxa
+all: bytecode opt
 
-swflib.cmxa: $(MODULES)
-	ocamlopt $(LFLAGS) $(LIBS) $(MODULES)
+bytecode: swflib.cma
 
+opt: swflib.cmxa
+
+swflib.cma: $(MODULES:=.cmo)
+	ocamlc -o swflib.cma -a $(CFLAGS) $(LIBS) $(MODULES:=.cmo)
+
+swflib.cmxa: $(MODULES:=.cmx)
+	ocamlopt -o swflib.cmxa -a $(CFLAGS) $(LIBS) $(MODULES:=.cmx)
+
+actionScript.cmo: swf.cmo
 actionScript.cmx: swf.cmx
-
+as3code.cmo: as3.cmi
 as3code.cmx: as3.cmi
-
-as3hl.cmi: as3.cmi
-
+as3hlparse.cmo: as3parse.cmo as3hl.cmi as3code.cmo as3.cmi
 as3hlparse.cmx: as3parse.cmx as3hl.cmi as3code.cmx as3.cmi
-
+as3parse.cmo: as3code.cmo as3.cmi
 as3parse.cmx: as3code.cmx as3.cmi
-
+png.cmo: png.cmi
 png.cmx: png.cmi
-
+swf.cmo: as3.cmi
 swf.cmx: as3.cmi
-
+swfParser.cmo: swf.cmo as3parse.cmo actionScript.cmo
 swfParser.cmx: swf.cmx as3parse.cmx actionScript.cmx
-
-swfPic.cmx: swf.cmx png.cmi
+swfPic.cmo: swf.cmo png.cmi
+swfPic.cmx: swf.cmx png.cmx
 
 
 clean:
-	rm -f swflib.cmxa swflib.lib swflib.a as3.cmi as3hl.cmi
-	rm -f $(MODULES) $(MODULES:.cmx=.obj) $(MODULES:.cmx=.cmi) $(MODULES:.cmx=.o)
+	rm -f swflib.cma swflib.cmxa swflib.lib swflib.a as3.cmi as3hl.cmi
+	rm -f $(MODULES:=.cmo) $(MODULES:=.cmx) $(MODULES:=.obj) $(MODULES:=.cmi) $(MODULES:=.o)
 
 # SUFFIXES
 .ml.cmo:
